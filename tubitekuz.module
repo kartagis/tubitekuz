@@ -1,0 +1,77 @@
+<?php
+
+function tubitekuz_node_presave($node) {
+  global $user;
+  if (($user->uid == 0) && $node->type == "proje") {
+    $account = new stdClass();
+    $newUser = array(
+      'is_new' => TRUE,
+      'status' => TRUE,
+      'name' => $node->field_kullanici_adi['und'][0]['value'],
+      'mail' => $node->field_e_posta['und'][0]['email'],
+      'roles' => array(
+        DRUPAL_AUTHENTICATED_RID => 'authenticated user',
+        3 => 'isveren',
+        ),
+      'notify' => TRUE,
+    );
+    user_save($account, $newUser);
+    drupal_set_message(t('Proje oluşturduğun için teşekkür ederiz @name. Projen en kısa zamanda incelenip yayınlanacak. Bu arada biz senin için bir hesap oluşturduk ve @email adresine bir e-posta gönderdik. Lütfen kontrol et.', array('@email' => $newUser['mail'], '@name' => $newUser['name'])));
+    $uid = db_query("SELECT MAX(uid) FROM {users}")->fetchField();
+    $node->uid = $uid;
+    _user_mail_notify('register_no_approval_required', $account);
+  }
+}
+
+function tubitekuz_webform_submission_insert($node, $submission) {
+  global $user;
+  global $node;
+  if (($user->uid == 0) && ($submission->nid == 97)) {
+    $account = new stdClass();
+    $newUser = array(
+      'is_new' => TRUE,
+      'status' => TRUE,
+      'name' => $submission->data[2][0]." ".$submission->data[3][0],
+      'mail' => $submission->data[4][0],
+      'roles' => array(
+        DRUPAL_AUTHENTICATED_RID => 'authenticated user',
+        4 => 'uzman',
+        ),
+      'notify' => TRUE,
+    );
+    user_save($account, $newUser);
+    $username = $newUser['name'];
+    $email = $newUser['mail'];
+    drupal_set_message(t('Projeye uzman olarak başvurduğun için teşekkürler @name. Bu arada biz senin için bir hesap oluşturduk ve @email adresine bir e-posta gönderdik. Lütfen kontrol et.', array('@name' => $username, '@email' => $email)));
+    $uid = $account->uid;
+    db_update('webform_submissions')
+      ->fields(array(
+        'uid' => $uid,
+      ))
+      ->condition('sid', $submission->sid, '=')
+      ->execute();
+    _user_mail_notify('register_admin_created', $account);
+  }
+}
+
+function tubitekuz_form_proje_node_form_alter(&$form, &$form_state, $form_id) {
+  global $user;
+  if ($user->uid > 0) {
+    $form['field_kullanici_adi']['#access'] = FALSE;
+    $form['field_e_posta']['#access'] = FALSE;
+  } elseif ($user->uid == 0) {
+    drupal_add_js(drupal_get_path('module','tubitekuz') . '/js/tubitekuz.js');
+  }
+}
+
+function tubitekuz_form_webform_client_form_97_alter(&$form, &$form_state, $form_id) {
+  global $user;
+  if ($user->uid > 0) {
+    $form['submitted']['kullanici_adi']['#access'] = FALSE;
+  }
+  elseif ($user->uid == 0) { 
+    drupal_add_js(drupal_get_path('module','tubitekuz') . '/js/tubitekuz.js');
+  }
+}
+
+
